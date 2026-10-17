@@ -61,20 +61,7 @@ const itinerary = [
   },
 ];
 
-const highlights = [
-  {
-    title: "One connected plan",
-    text: "Flights, stays and activities sit in a single day-by-day view instead of ten open tabs.",
-  },
-  {
-    title: "Built around your pace",
-    text: "Tell us how you like to travel and the itinerary leaves room for the unplanned.",
-  },
-  {
-    title: "Easy to share and edit",
-    text: "Send the plan to your group, adjust it together and keep one source of truth.",
-  },
-];
+
 
 const navLinks = [
   { label: "Why Tralendr", href: "#why" },

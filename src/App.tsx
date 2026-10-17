@@ -4,9 +4,7 @@ import {
   ArrowRight,
   ArrowUpRight,
   Bookmark,
-  Menu,
   Sparkles,
-  X,
 } from "lucide-react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -14,6 +12,9 @@ import { useGSAP } from "@gsap/react";
 import Lenis from "lenis";
 
 gsap.registerPlugin(ScrollTrigger, useGSAP);
+
+/* Stops pinned sections from jumping when the mobile address bar shows/hides */
+ScrollTrigger.config({ ignoreMobileResize: true });
 
 const destinations = [
   {
@@ -60,20 +61,26 @@ const itinerary = [
   },
 ];
 
-// const highlights = [
-//   {
-//     title: "One connected plan",
-//     text: "Flights, stays and activities sit in a single day-by-day view instead of ten open tabs.",
-//   },
-//   {
-//     title: "Built around your pace",
-//     text: "Tell us how you like to travel and the itinerary leaves room for the unplanned.",
-//   },
-//   {
-//     title: "Easy to share and edit",
-//     text: "Send the plan to your group, adjust it together and keep one source of truth.",
-//   },
-// ];
+const highlights = [
+  {
+    title: "One connected plan",
+    text: "Flights, stays and activities sit in a single day-by-day view instead of ten open tabs.",
+  },
+  {
+    title: "Built around your pace",
+    text: "Tell us how you like to travel and the itinerary leaves room for the unplanned.",
+  },
+  {
+    title: "Easy to share and edit",
+    text: "Send the plan to your group, adjust it together and keep one source of truth.",
+  },
+];
+
+const navLinks = [
+  { label: "Why Tralendr", href: "#why" },
+  { label: "How it works", href: "#how" },
+  { label: "Destinations", href: "#explore" },
+];
 
 function Brand() {
   return (
@@ -408,6 +415,130 @@ function App() {
     };
   }, []);
 
+  /* Mobile menu: scroll lock, Escape to close, auto-close when resized to desktop */
+  useEffect(() => {
+    if (!menuOpen) return;
+    lenisRef.current?.stop();
+    document.body.style.overflow = "hidden";
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    const mq = window.matchMedia("(min-width: 850px)");
+    const onMq = () => {
+      if (mq.matches) setMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    mq.addEventListener("change", onMq);
+
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      mq.removeEventListener("change", onMq);
+      document.body.style.overflow = "";
+      lenisRef.current?.start();
+    };
+  }, [menuOpen]);
+
+  /* Mobile menu: circular reveal from the toggle + staggered links */
+  const menuFirst = useRef(true);
+  useEffect(() => {
+    const el = root.current;
+    if (!el) return;
+
+    /* classList (not React className) so it never wipes nav--scrolled */
+    el.querySelector(".nav")?.classList.toggle("nav--open", menuOpen);
+
+    if (menuFirst.current) {
+      menuFirst.current = false;
+      return;
+    }
+
+    const menu = el.querySelector<HTMLElement>(".mobile-menu");
+    const toggle = el.querySelector<HTMLElement>(".menu-toggle");
+    if (!menu || !toggle) return;
+
+    const reduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+
+    const r = toggle.getBoundingClientRect();
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    const radius =
+      Math.hypot(
+        Math.max(cx, window.innerWidth - cx),
+        Math.max(cy, window.innerHeight - cy),
+      ) + 24;
+    const from = `circle(0px at ${cx}px ${cy}px)`;
+    const full = `circle(${radius}px at ${cx}px ${cy}px)`;
+
+    const ctx = gsap.context(() => {
+      const tl = gsap.timeline();
+
+      if (reduced) {
+        tl.set(
+          menu,
+          menuOpen
+            ? { visibility: "visible", pointerEvents: "auto", clipPath: "none" }
+            : { visibility: "hidden", pointerEvents: "none" },
+        );
+        return;
+      }
+
+      if (menuOpen) {
+        tl.set(".mm-link, .mm-foot", { clearProps: "opacity,transform" }, 0)
+          .set(menu, { visibility: "visible", pointerEvents: "auto" }, 0)
+          .fromTo(
+            menu,
+            { clipPath: from },
+            { clipPath: full, duration: 0.8, ease: "power3.inOut" },
+            0,
+          )
+          .fromTo(
+            ".mm-label-inner",
+            { yPercent: 115 },
+            { yPercent: 0, duration: 0.8, stagger: 0.08, ease: "power4.out" },
+            0.3,
+          )
+          .fromTo(
+            ".mm-index, .mm-arrow",
+            { opacity: 0 },
+            { opacity: 1, duration: 0.5, stagger: 0.04, ease: "power2.out" },
+            0.4,
+          )
+          .fromTo(
+            ".mm-rule",
+            { scaleX: 0 },
+            { scaleX: 1, duration: 0.8, stagger: 0.08, ease: "power3.out" },
+            0.35,
+          )
+          .fromTo(
+            ".mm-foot > *",
+            { y: 24, opacity: 0 },
+            { y: 0, opacity: 1, duration: 0.6, stagger: 0.08, ease: "power3.out" },
+            0.6,
+          )
+          .set(menu, { clipPath: "none" });
+      } else {
+        tl.to(
+          ".mm-link, .mm-foot",
+          { opacity: 0, y: -12, duration: 0.25, stagger: 0.03, ease: "power2.in" },
+          0,
+        )
+          .fromTo(
+            menu,
+            { clipPath: full },
+            { clipPath: from, duration: 0.6, ease: "power3.inOut" },
+            0.12,
+          )
+          .set(menu, { visibility: "hidden", pointerEvents: "none" })
+          .set(".mm-link, .mm-foot", { clearProps: "opacity,transform" });
+      }
+    }, el);
+
+    return () => ctx.kill();
+  }, [menuOpen]);
+
   useGSAP(
     () => {
       /* Always on: nav state + scroll progress (not decorative motion) */
@@ -432,9 +563,9 @@ function App() {
             "(max-width: 849px) and (prefers-reduced-motion: no-preference)",
         },
         (context) => {
-          const { desktop, mobile } = context.conditions as {
-            desktop: boolean;
+          const { mobile, desktop } = context.conditions as {
             mobile: boolean;
+            desktop: boolean;
           };
           const reveal = (
             targets: gsap.TweenTarget,
@@ -517,123 +648,159 @@ function App() {
             },
           });
 
-          /* 3. Why Tralendr */
           /* 3. Rolling words (pinned) */
-          const items = gsap.utils.toArray<HTMLElement>(".roll-item");
-          const last = items.length - 1;
-          const paint = (p: number) => {
-            const lh = items[0].offsetHeight;
-            gsap.set(".roll-list", { y: -p * lh });
-            items.forEach((el, i) => {
-              const d = i - p; // below the line > 0, on the line 0, above < 0
-              const above = Math.max(0, -d);
-              gsap.set(el, {
-                color: gsap.utils.interpolate(
-                  "#b8b8c0",
-                  "#e5383b",
-                  Math.max(0, 1 - above),
-                ),
-                opacity:
-                  d >= 1 ? 0 : d > 0 ? 1 - d : Math.max(0, 1 - above * 0.35),
-              });
-            });
-            gsap.set(".roll-sub", {
-              opacity: gsap.utils.clamp(0, 1, (p - (last - 0.5)) / 0.5),
-            });
-          };
-          paint(0);
-          ScrollTrigger.create({
-            trigger: ".roll",
-            start: "top top",
-            end: () => `+=${items.length * 40}%`,
-            pin: true,
-            scrub: 0.6,
-            anticipatePin: 1,
-            invalidateOnRefresh: true,
-            onUpdate: (self) => paint(self.progress * last),
-          });
-
-          /* 4. How it works: pinned, scrubbed on desktop; simple reveals on mobile */
           if (desktop) {
-            const story = gsap.timeline({
-              scrollTrigger: {
-                trigger: ".story-section",
-                start: "top top",
-                end: "+=1500",
-                pin: ".story-sticky",
-                scrub: 1,
-                anticipatePin: 1,
-              },
+            /* Desktop: original vertical word roll, unchanged */
+            const items = gsap.utils.toArray<HTMLElement>(".roll-item");
+            const last = items.length - 1;
+            const paint = (p: number) => {
+              const lh = items[0].offsetHeight;
+              gsap.set(".roll-list", { y: -p * lh });
+              items.forEach((el, i) => {
+                const d = i - p; // below the line > 0, on the line 0, above < 0
+                const above = Math.max(0, -d);
+                gsap.set(el, {
+                  color: gsap.utils.interpolate(
+                    "#b8b8c0",
+                    "#e5383b",
+                    Math.max(0, 1 - above),
+                  ),
+                  opacity:
+                    d >= 1
+                      ? 0
+                      : d > 0
+                        ? 1 - d
+                        : Math.max(0, 1 - above * 0.35),
+                });
+              });
+              gsap.set(".roll-sub", {
+                opacity: gsap.utils.clamp(0, 1, (p - (last - 0.5)) / 0.5),
+              });
+            };
+            paint(0);
+            ScrollTrigger.create({
+              trigger: ".roll",
+              start: "top top",
+              end: () => `+=${items.length * 40}%`,
+              pin: true,
+              scrub: 0.6,
+              anticipatePin: 1,
+              invalidateOnRefresh: true,
+              onUpdate: (self) => paint(self.progress * last),
             });
-            story
-              .fromTo(
-                ".story-kicker",
-                { opacity: 0.3, x: -16 },
-                { opacity: 1, x: 0, duration: 0.18 },
-                0,
-              )
-              .fromTo(
-                ".story-heading .word",
-                { yPercent: 110, opacity: 0 },
-                { yPercent: 0, opacity: 1, stagger: 0.12, duration: 0.35 },
-                0,
-              )
-              .fromTo(
-                ".story-copy, .story-step",
-                { y: 16, opacity: 0 },
-                { y: 0, opacity: 1, stagger: 0.1, duration: 0.25 },
-                0.2,
-              )
-              .fromTo(
-                ".itinerary-window",
-                { y: 70, scale: 0.94, opacity: 0 },
-                { y: 0, scale: 1, opacity: 1, duration: 0.5 },
-                0.12,
-              )
-              .fromTo(
-                ".route-path",
-                { strokeDashoffset: 420 },
-                { strokeDashoffset: 0, duration: 0.55 },
-                0.35,
-              )
-              .fromTo(
-                ".route-pin",
-                { scale: 0, transformOrigin: "center" },
-                { scale: 1, stagger: 0.09, duration: 0.18 },
-                0.5,
-              )
-              .fromTo(
-                ".itinerary-row",
-                { x: 24, opacity: 0 },
-                { x: 0, opacity: 1, stagger: 0.12, duration: 0.24 },
-                0.58,
-              );
           }
+
           if (mobile) {
-            reveal(".story-left", ".story-section");
-            reveal(".itinerary-window", ".itinerary-window");
-            gsap.from(".route-path", {
-              strokeDashoffset: 420,
-              duration: 1.4,
-              ease: "power2.out",
+            /* Mobile: pinned horizontal text marquee with pop-in chips */
+            const rows = gsap.utils.toArray<HTMLElement>(".rm-row");
+            const chips = gsap.utils.toArray<HTMLElement>(".rm-chip");
+
+            const tl = gsap.timeline({
+              defaults: { ease: "none" },
               scrollTrigger: {
-                trigger: ".route-map",
-                start: "top 85%",
-                once: true,
+                trigger: ".roll",
+                start: "top top",
+                end: "+=260%",
+                pin: true,
+                scrub: 0.8,
+                anticipatePin: 1,
+                invalidateOnRefresh: true,
               },
             });
-            gsap.from(".itinerary-row", {
-              x: 20,
-              opacity: 0,
-              stagger: 0.12,
-              duration: 0.6,
-              scrollTrigger: {
-                trigger: ".itinerary-list",
-                start: "top 88%",
-                once: true,
-              },
+
+            /* Rows slide sideways, alternating direction */
+            rows.forEach((row, i) => {
+              const dist = () =>
+                Math.max(0, row.offsetWidth - window.innerWidth);
+              const toLeft = i % 2 === 0;
+              tl.fromTo(
+                row,
+                { x: () => (toLeft ? 0 : -dist()) },
+                { x: () => (toLeft ? -dist() : 0), duration: 1 },
+                0,
+              );
             });
+
+            /* Chips pop in one after another with a small tilt */
+            tl.fromTo(
+              chips,
+              { scale: 0.55, opacity: 0, rotate: -10 },
+              {
+                scale: 1,
+                opacity: 1,
+                rotate: (i: number) => (i % 2 ? 3 : -3),
+                duration: 0.2,
+                stagger: 0.18,
+                ease: "back.out(2.2)",
+              },
+              0,
+            );
+
+            /* Closing line */
+            tl.fromTo(
+              ".rm-sub",
+              { opacity: 0, y: 16 },
+              { opacity: 1, y: 0, duration: 0.2 },
+              0.8,
+            );
           }
+
+          /* 4. How it works: pinned and scrubbed on desktop AND mobile
+             (mobile gets a shorter scroll distance and a compact layout in CSS) */
+          const story = gsap.timeline({
+            scrollTrigger: {
+              trigger: ".story-section",
+              start: "top top",
+              end: mobile ? "+=1100" : "+=1500",
+              pin: ".story-sticky",
+              scrub: 1,
+              anticipatePin: 1,
+              invalidateOnRefresh: true,
+            },
+          });
+          story
+            .fromTo(
+              ".story-kicker",
+              { opacity: 0.3, x: -16 },
+              { opacity: 1, x: 0, duration: 0.18 },
+              0,
+            )
+            .fromTo(
+              ".story-heading .word",
+              { yPercent: 110, opacity: 0 },
+              { yPercent: 0, opacity: 1, stagger: 0.12, duration: 0.35 },
+              0,
+            )
+            .fromTo(
+              ".story-copy, .story-step",
+              { y: 16, opacity: 0 },
+              { y: 0, opacity: 1, stagger: 0.1, duration: 0.25 },
+              0.2,
+            )
+            .fromTo(
+              ".itinerary-window",
+              { y: 70, scale: 0.94, opacity: 0 },
+              { y: 0, scale: 1, opacity: 1, duration: 0.5 },
+              0.12,
+            )
+            .fromTo(
+              ".route-path",
+              { strokeDashoffset: 420 },
+              { strokeDashoffset: 0, duration: 0.55 },
+              0.35,
+            )
+            .fromTo(
+              ".route-pin",
+              { scale: 0, transformOrigin: "center" },
+              { scale: 1, stagger: 0.09, duration: 0.18 },
+              0.5,
+            )
+            .fromTo(
+              ".itinerary-row",
+              { x: 24, opacity: 0 },
+              { x: 0, opacity: 1, stagger: 0.12, duration: 0.24 },
+              0.58,
+            );
 
           /* 5. Destinations */
           reveal(".destinations .section-heading > *", ".destinations", {
@@ -706,6 +873,13 @@ function App() {
     { scope: root },
   );
 
+  /* Runs before the global anchor handler, so Lenis can already scroll */
+  const closeMenuForLink = () => {
+    lenisRef.current?.start();
+    document.body.style.overflow = "";
+    setMenuOpen(false);
+  };
+
   const buildTrip = () => {
     setTripReady(true);
     window.setTimeout(() => {
@@ -726,30 +900,56 @@ function App() {
       <nav className="nav">
         <div className="nav-inner page-gutter">
           <Brand />
-          <div
-            className={`nav-links ${menuOpen ? "nav-links--open" : ""}`}
-            onClick={() => setMenuOpen(false)}
-          >
-            <a href="#why">Why Tralendr</a>
-            <a href="#how">How it works</a>
-            <a href="#explore">Destinations</a>
-            <a className="nav-mobile-cta" href="#start">
-              Start planning
-            </a>
+          <div className="nav-links">
+            {navLinks.map((l) => (
+              <a href={l.href} key={l.href}>
+                {l.label}
+              </a>
+            ))}
           </div>
           <a className="nav-cta" href="#start">
             Start planning
           </a>
           <button
-            className="menu-toggle"
-            onClick={() => setMenuOpen(!menuOpen)}
+            className={`menu-toggle ${menuOpen ? "menu-toggle--open" : ""}`}
+            onClick={() => setMenuOpen((o) => !o)}
             aria-label={menuOpen ? "Close navigation" : "Open navigation"}
             aria-expanded={menuOpen}
+            aria-controls="mobile-menu"
           >
-            {menuOpen ? <X /> : <Menu />}
+            <span className="burger" aria-hidden="true">
+              <i />
+              <i />
+            </span>
           </button>
         </div>
       </nav>
+
+      <div id="mobile-menu" className="mobile-menu" aria-hidden={!menuOpen}>
+        <div className="mm-links">
+          {navLinks.map((l, i) => (
+            <a
+              className="mm-link"
+              href={l.href}
+              key={l.href}
+              onClick={closeMenuForLink}
+            >
+              <span className="mm-index">0{i + 1}</span>
+              <span className="mm-label">
+                <span className="mm-label-inner">{l.label}</span>
+              </span>
+              <ArrowUpRight className="mm-arrow" size={22} />
+              <span className="mm-rule" />
+            </a>
+          ))}
+        </div>
+        <div className="mm-foot">
+          <a className="button mm-cta" href="#start" onClick={closeMenuForLink}>
+            Start planning <ArrowUpRight size={18} />
+          </a>
+          <p>Travel planning, simplified.</p>
+        </div>
+      </div>
 
       <main>
         <section className="hero page-gutter">
@@ -787,6 +987,12 @@ function App() {
         </section>
 
         <section id="why" className="roll" aria-label="Who Tralendr is for">
+          <span className="sr-only">
+            Wanderer, foodie, hiker or planner? Tralendr is built for all of
+            them.
+          </span>
+
+          {/* Desktop: vertical word roll */}
           <div className="roll-inner">
             <div className="roll-line">
               <span className="roll-prefix">Are you a trip</span>
@@ -801,13 +1007,30 @@ function App() {
                 </span>
               </span>
             </div>
-            <span className="sr-only">
-              Wanderer, foodie, hiker or planner? Tralendr is built for all of
-              them.
-            </span>
             <p className="roll-sub">
               Tralendr is built for everyone who travels.
             </p>
+          </div>
+
+          {/* Mobile: horizontal marquee */}
+          <div className="roll-mobile" aria-hidden="true">
+            <div className="rm-row">
+              <span>Are you a trip</span>
+              <span className="rm-chip rm-chip--coral">Wanderer?</span>
+              <span>chasing the road less taken</span>
+            </div>
+            <div className="rm-row">
+              <span>or a hungry</span>
+              <span className="rm-chip rm-chip--sage">Foodie?</span>
+              <span>hunting the best table in town</span>
+            </div>
+            <div className="rm-row">
+              <span>maybe a</span>
+              <span className="rm-chip rm-chip--sand">Hiker?</span>
+              <span>after the next summit, or a</span>
+              <span className="rm-chip rm-chip--ink">Planner?</span>
+            </div>
+            <p className="rm-sub">Tralendr is built for everyone who travels.</p>
           </div>
         </section>
 
